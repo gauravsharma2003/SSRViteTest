@@ -1,10 +1,11 @@
 {
   "version": 2,
   "buildCommand": "npm run build",
+  "outputDirectory": "dist/client",
   "routes": [
     {
       "src": "/assets/(.*)",
-      "dest": "/dist/client/assets/$1"
+      "dest": "/assets/$1"
     },
     {
       "src": "/(.*)",
