@@ -1,5 +1,6 @@
 import './App.css'
 import { useState } from 'react'
+import DragBottomSheet from './DragBottomSheet'
 
 function App({ url, weatherData }) {
   const getCurrentPage = () => {
@@ -10,6 +11,7 @@ function App({ url, weatherData }) {
   }
 
   const [currentPage, setCurrentPage] = useState(getCurrentPage())
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false)
 
   const navigate = (page) => {
     if (page === 'home') {
@@ -40,6 +42,21 @@ function App({ url, weatherData }) {
           <h1>Welcome Home</h1>
           <p>This is the home page of our SSR application.</p>
           <p>Navigate to the weather page to see server-side fetched weather data.</p>
+          <button 
+            onClick={() => setIsBottomSheetOpen(true)}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              marginTop: '20px'
+            }}
+          >
+            Open Bottom Sheet
+          </button>
         </div>
       )}
 
@@ -83,6 +100,21 @@ function App({ url, weatherData }) {
           <p>The weather page fetches data server-side, so the API call is not visible in the network tab.</p>
         </div>
       )}
+
+      <DragBottomSheet 
+        isOpen={isBottomSheetOpen} 
+        onClose={() => setIsBottomSheetOpen(false)}
+      >
+        <h2>Bottom Sheet Content</h2>
+        <p>This is the content inside the bottom sheet.</p>
+        <p>You can drag the header down to close this sheet.</p>
+        <h2>Bottom Sheet Content</h2>
+        <p>This is the content inside the bottom sheet.</p>
+        <p>You can drag the header down to close this sheet.</p>
+          <h2>Bottom Sheet Content</h2>
+        <p>This is the content inside the bottom sheet.</p>
+        <p>You can drag the header down to close this sheet.</p>
+      </DragBottomSheet>
     </>
   )
 }
