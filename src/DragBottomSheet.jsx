@@ -16,7 +16,6 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
   }
 
   const handleTouchStart = (e) => {
-    e.preventDefault()
     setIsDragging(true)
     setStartY(e.touches[0].clientY)
     setCurrentY(e.touches[0].clientY)
@@ -123,13 +122,6 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
 
   return (
     <>
-      <style>
-        {`
-          .bottom-sheet-content::-webkit-scrollbar {
-            display: none;
-          }
-        `}
-      </style>
     <div style={{
       position: 'fixed',
       top: 0,
@@ -144,7 +136,7 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
       <div
         ref={sheetRef}
         style={{
-          backgroundColor: 'blackUnable to preventDefault inside passive event listener invocation.',
+          backgroundColor: 'black',
           width: '100%',
           height: '60vh',
           maxHeight: '600px',
