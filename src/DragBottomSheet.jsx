@@ -6,6 +6,7 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
   const [currentY, setCurrentY] = useState(0)
   const [dragOffset, setDragOffset] = useState(0)
   const [isClosing, setIsClosing] = useState(false)
+  const [isOpening, setIsOpening] = useState(false)
   const sheetRef = useRef(null)
 
   const handleMouseDown = (e) => {
@@ -33,7 +34,6 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
 
     const handleTouchMoveEvent = (e) => {
       if (!isDragging) return
-      e.preventDefault()
       setCurrentY(e.touches[0].clientY)
       const offset = Math.max(0, e.touches[0].clientY - startY)
       setDragOffset(offset)
@@ -81,19 +81,29 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
     }
   }, [isDragging, startY, dragOffset, onClose])
 
-  // Reset position when sheet opens
+  // Handle opening and closing animations
   useEffect(() => {
     if (isOpen) {
-      setDragOffset(0)
+      setIsOpening(true)
+      setDragOffset(window.innerHeight) // Start from bottom
       setIsClosing(false)
       setIsDragging(false)
       setStartY(0)
       setCurrentY(0)
       // Prevent body scroll when sheet is open
       document.body.style.overflow = 'hidden'
+      
+      // Animate to position after a brief delay
+      setTimeout(() => {
+        setDragOffset(0)
+        setTimeout(() => {
+          setIsOpening(false)
+        }, 300)
+      }, 10)
     } else {
       // Restore body scroll when sheet closes
       document.body.style.overflow = 'unset'
+      setIsOpening(false)
     }
 
     return () => {
@@ -143,7 +153,7 @@ const DragBottomSheet = ({ isOpen, onClose, children }) => {
           borderTopLeftRadius: '20px',
           borderTopRightRadius: '20px',
           transform: `translateY(${dragOffset}px)`,
-          transition: (isDragging && !isClosing) ? 'none' : 'transform 0.3s ease-out',
+          transition: (isDragging && !isClosing && !isOpening) ? 'none' : 'transform 0.3s ease-out',
           display: 'flex',
           flexDirection: 'column',
         }}
