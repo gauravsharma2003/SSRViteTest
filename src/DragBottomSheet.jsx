@@ -1,231 +1,233 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 
 const DragBottomSheet = ({ isOpen, onClose, children }) => {
-  const [isDragging, setIsDragging] = useState(false)
-  const [startY, setStartY] = useState(0)
-  const [currentY, setCurrentY] = useState(0)
-  const [dragOffset, setDragOffset] = useState(0)
-  const [isClosing, setIsClosing] = useState(false)
-  const [isOpening, setIsOpening] = useState(false)
+  const [state, setState] = useState({
+    dragOffset: 0,
+    isAnimating: false
+  })
+  
+  const dragRef = useRef({
+    isDragging: false,
+    startY: 0,
+    isClosing: false,
+    isOpening: false
+  })
+  
   const sheetRef = useRef(null)
+  const animationTimeoutRef = useRef(null)
 
-  const handleMouseDown = (e) => {
+  const ANIMATION_DURATION = 300
+  const CLOSE_THRESHOLD_RATIO = 0.33
+  const MIN_CLOSE_THRESHOLD = 150
+  const SHEET_HEIGHT = '60vh'
+  const MAX_SHEET_HEIGHT = 600
+
+  const handleMouseDown = useCallback((e) => {
     e.preventDefault()
-    setIsDragging(true)
-    setStartY(e.clientY)
-    setCurrentY(e.clientY)
-  }
+    dragRef.current.isDragging = true
+    dragRef.current.startY = e.clientY
+  }, [])
 
-  const handleTouchStart = (e) => {
-    setIsDragging(true)
-    setStartY(e.touches[0].clientY)
-    setCurrentY(e.touches[0].clientY)
-  }
+  const handleTouchStart = useCallback((e) => {
+    dragRef.current.isDragging = true
+    dragRef.current.startY = e.touches[0].clientY
+  }, [])
 
 
+  const closeWithAnimation = useCallback(() => {
+    dragRef.current.isClosing = true
+    setState(prev => ({ ...prev, dragOffset: window.innerHeight, isAnimating: true }))
+    
+    if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current)
+    
+    animationTimeoutRef.current = setTimeout(() => {
+      onClose()
+      dragRef.current.isClosing = false
+      setState({ dragOffset: 0, isAnimating: false })
+    }, ANIMATION_DURATION)
+  }, [onClose])
+
+  const handleDragEnd = useCallback(() => {
+    if (!dragRef.current.isDragging) return
+    dragRef.current.isDragging = false
+    
+    const sheetHeight = sheetRef.current?.offsetHeight || MAX_SHEET_HEIGHT
+    const threshold = Math.min(MIN_CLOSE_THRESHOLD, sheetHeight * CLOSE_THRESHOLD_RATIO)
+    
+    if (state.dragOffset > threshold) {
+      closeWithAnimation()
+    } else {
+      setState(prev => ({ ...prev, dragOffset: 0 }))
+      dragRef.current.startY = 0
+    }
+  }, [state.dragOffset, closeWithAnimation])
+
+  // Combined effect for drag handling and scroll prevention
   useEffect(() => {
-    const handleMouseMoveEvent = (e) => {
-      if (!isDragging) return
+    const drag = dragRef.current
+    
+    const handleMouseMove = (e) => {
+      if (!drag.isDragging) return
       e.preventDefault()
-      setCurrentY(e.clientY)
-      const offset = Math.max(0, e.clientY - startY)
-      setDragOffset(offset)
+      const offset = Math.max(0, e.clientY - drag.startY)
+      setState(prev => ({ ...prev, dragOffset: offset }))
     }
 
-    const handleTouchMoveEvent = (e) => {
-      if (!isDragging) return
-      setCurrentY(e.touches[0].clientY)
-      const offset = Math.max(0, e.touches[0].clientY - startY)
-      setDragOffset(offset)
+    const handleTouchMove = (e) => {
+      if (!drag.isDragging) return
+      e.preventDefault()
+      const offset = Math.max(0, e.touches[0].clientY - drag.startY)
+      setState(prev => ({ ...prev, dragOffset: offset }))
     }
 
-    const handleDragEndEvent = () => {
-      if (!isDragging) return
-      setIsDragging(false)
-      
-      // Calculate the height of the sheet - use a more reliable calculation
-      const sheetHeight = sheetRef.current ? sheetRef.current.offsetHeight : 400
-      const threshold = Math.min(150, sheetHeight / 3) // Close if dragged 150px or 1/3 of height
-      
-      // Close if dragged more than the threshold
-      if (dragOffset > threshold) {
-        setIsClosing(true)
-        // Animate to full height before closing
-        setDragOffset(window.innerHeight)
-        setTimeout(() => {
-          onClose()
-          setIsClosing(false)
-          setDragOffset(0)
-        }, 300) // Match transition duration
-        return
-      }
-      
-      // Reset position if not closing
-      setDragOffset(0)
-      setStartY(0)
-      setCurrentY(0)
+    const handleEnd = () => {
+      if (!drag.isDragging) return
+      handleDragEnd()
     }
 
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMoveEvent)
-      document.addEventListener('mouseup', handleDragEndEvent)
-      document.addEventListener('touchmove', handleTouchMoveEvent, { passive: false })
-      document.addEventListener('touchend', handleDragEndEvent)
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMoveEvent)
-        document.removeEventListener('mouseup', handleDragEndEvent)
-        document.removeEventListener('touchmove', handleTouchMoveEvent)
-        document.removeEventListener('touchend', handleDragEndEvent)
-      }
+    const preventScroll = (e) => {
+      if (drag.isDragging) e.preventDefault()
     }
-  }, [isDragging, startY, dragOffset, onClose])
 
-  // Handle opening and closing animations
+    // Add all listeners
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    document.addEventListener('touchend', handleEnd)
+    document.addEventListener('wheel', preventScroll, { passive: false })
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleEnd)
+      document.removeEventListener('wheel', preventScroll)
+    }
+  }, [handleDragEnd])
+
+  // Opening animation effect
   useEffect(() => {
     if (isOpen) {
-      setIsOpening(true)
-      setDragOffset(window.innerHeight) // Start from bottom
-      setIsClosing(false)
-      setIsDragging(false)
-      setStartY(0)
-      setCurrentY(0)
-      // Prevent body scroll when sheet is open
+      Object.assign(dragRef.current, { isOpening: true, isClosing: false, isDragging: false, startY: 0 })
+      setState({ dragOffset: window.innerHeight, isAnimating: true })
       document.body.style.overflow = 'hidden'
       
-      // Animate to position after a brief delay
-      setTimeout(() => {
-        setDragOffset(0)
+      const openTimer = setTimeout(() => {
+        setState({ dragOffset: 0, isAnimating: true })
         setTimeout(() => {
-          setIsOpening(false)
-        }, 300)
+          dragRef.current.isOpening = false
+          setState(prev => ({ ...prev, isAnimating: false }))
+        }, ANIMATION_DURATION)
       }, 10)
+      
+      return () => {
+        clearTimeout(openTimer)
+        document.body.style.overflow = 'unset'
+      }
     } else {
-      // Restore body scroll when sheet closes
       document.body.style.overflow = 'unset'
-      setIsOpening(false)
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset'
+      dragRef.current.isOpening = false
     }
   }, [isOpen])
 
-  // Prevent scroll during dragging
   useEffect(() => {
-    if (isDragging) {
-      const preventScroll = (e) => {
-        e.preventDefault()
-      }
-      
-      document.addEventListener('touchmove', preventScroll, { passive: false })
-      document.addEventListener('wheel', preventScroll, { passive: false })
-      
-      return () => {
-        document.removeEventListener('touchmove', preventScroll)
-        document.removeEventListener('wheel', preventScroll)
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current)
       }
     }
-  }, [isDragging])
+  }, [])
+
+  const overlayStyle = useMemo(() => ({
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+    display: 'flex',
+    alignItems: 'flex-end'
+  }), [])
+
+  const sheetStyle = useMemo(() => ({
+    backgroundColor: 'black',
+    width: '100%',
+    height: SHEET_HEIGHT,
+    maxHeight: `${MAX_SHEET_HEIGHT}px`,
+    borderTopLeftRadius: '20px',
+    borderTopRightRadius: '20px',
+    transform: `translateY(${state.dragOffset}px)`,
+    transition: (dragRef.current.isDragging && !dragRef.current.isClosing && !dragRef.current.isOpening) ? 'none' : `transform ${ANIMATION_DURATION}ms ease-out`,
+    display: 'flex',
+    flexDirection: 'column',
+  }), [state.dragOffset, state.isAnimating])
+
+  const headerStyle = useMemo(() => ({
+    padding: '16px',
+    borderBottom: '1px solid #e0e0e0',
+    cursor: dragRef.current.isDragging ? 'grabbing' : 'grab',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative'
+  }), [state.isAnimating])
+
+  const pillStyle = useMemo(() => ({
+    width: '40px',
+    height: '4px',
+    backgroundColor: '#d0d0d0',
+    borderRadius: '2px',
+    position: 'absolute',
+    top: '8px'
+  }), [])
+
+  const closeButtonStyle = useMemo(() => ({
+    position: 'absolute',
+    right: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    fontSize: '24px',
+    cursor: 'pointer',
+    color: '#666',
+    padding: '4px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  }), [])
+
+  const contentStyle = useMemo(() => ({
+    flex: 1,
+    padding: '20px',
+    overflow: 'auto',
+    overflowX: 'hidden',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none',
+  }), [])
 
   if (!isOpen) return null
 
   return (
     <>
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      zIndex: 1000,
-      display: 'flex',
-      alignItems: 'flex-end'
-    }}>
-      <div
-        ref={sheetRef}
-        style={{
-          backgroundColor: 'black',
-          width: '100%',
-          height: '60vh',
-          maxHeight: '600px',
-          borderTopLeftRadius: '20px',
-          borderTopRightRadius: '20px',
-          transform: `translateY(${dragOffset}px)`,
-          transition: (isDragging && !isClosing && !isOpening) ? 'none' : 'transform 0.3s ease-out',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div
-          style={{
-            padding: '16px',
-            borderBottom: '1px solid #e0e0e0',
-            cursor: isDragging ? 'grabbing' : 'grab',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative'
-          }}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-        >
-          <div
-            style={{
-              width: '40px',
-              height: '4px',
-              backgroundColor: '#d0d0d0',
-              borderRadius: '2px',
-              position: 'absolute',
-              top: '8px'
-            }}
-          />
-          <button
-            onClick={() => {
-              setIsClosing(true)
-              setDragOffset(window.innerHeight)
-              setTimeout(() => {
-                onClose()
-                setIsClosing(false)
-                setDragOffset(0)
-              }, 300)
-            }}
-            style={{
-              position: 'absolute',
-              right: '16px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              fontSize: '24px',
-              cursor: 'pointer',
-              color: '#aaa',
-              padding: '4px',
-              borderRadius: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            ×
-          </button>
-        </div>
-        <div 
-          className="bottom-sheet-content"
-          style={{
-            flex: 1,
-            padding: '20px',
-            overflow: 'auto',
-            overflowX: 'hidden',
-            scrollbarWidth: 'none', // Firefox
-            msOverflowStyle: 'none', // IE and Edge
-          }}
-        >
-          {children}
+      <style>
+        {'.bottom-sheet-content::-webkit-scrollbar { display: none; }'}
+      </style>
+      <div style={overlayStyle}>
+        <div ref={sheetRef} style={sheetStyle}>
+          <div style={headerStyle} onMouseDown={handleMouseDown} onTouchStart={handleTouchStart}>
+            <div style={pillStyle} />
+            <button onClick={closeWithAnimation} style={closeButtonStyle}>
+              ×
+            </button>
+          </div>
+          <div className="bottom-sheet-content" style={contentStyle}>
+            {children}
+          </div>
         </div>
       </div>
-    </div>
     </>
   )
 }
